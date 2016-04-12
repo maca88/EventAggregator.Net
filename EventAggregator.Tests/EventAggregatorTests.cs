@@ -46,6 +46,28 @@ namespace EventAggregatorNet.Tests
         }
 
         [Fact]
+        public void Should_throws_invalid_operation_exception()
+        {
+            var someMessageHandler = new SomeMessageHandler4();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            Assert.Throws<InvalidOperationException>(() => eventAggregator.SendMessage<SomeMessage>());
+        }
+
+        [Fact]
+        public async Task Should_throws_invalid_operation_exception_async()
+        {
+            var someMessageHandler = new SomeMessageHandler4();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await eventAggregator.SendMessageAsync<SomeMessage>());
+        }
+
+        [Fact]
         public async Task Should_send_message_async_when_mixing_async_nonasync_listners()
         {
             var someMessageHandler = new SomeMessageHandler();

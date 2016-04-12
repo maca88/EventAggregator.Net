@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -110,6 +111,23 @@ namespace EventAggregatorNet.Tests
         {
             await Task.Delay(500);
             _eventsTrapped.Add(message);
+        }
+    }
+
+    public class SomeMessageHandler4 : IListener<SomeMessage>
+    {
+        public void Handle(SomeMessage message)
+        {
+            throw new InvalidOperationException("");
+        }
+    }
+
+    public class SomeMessageHandler4Async : IListenerAsync<SomeMessage>
+    {
+        public async Task Handle(SomeMessage message)
+        {
+            await Task.Delay(500);
+            throw new InvalidOperationException("");
         }
     }
 }

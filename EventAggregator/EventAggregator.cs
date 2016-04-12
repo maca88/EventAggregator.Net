@@ -555,7 +555,7 @@ namespace EventAggregatorNet
                         _handlerMethod.Invoke(target, new[] {message});
                     }
                 }
-#if NETFX_CORE || WINDOWS_PHONE || DOTNET_CLIENT
+#if NETFX_CORE || WINDOWS_PHONE || NET_CLIENT
                 catch (AggregateException ex)
                 {
                     if (ex.InnerException is TargetInvocationException)
@@ -579,13 +579,16 @@ namespace EventAggregatorNet
                     exDispachInfo.Throw();
                 }
 #endif
-#if !NETFX_CORE && !WINDOWS_PHONE && !DOTNET_CLIENT
                 catch (TargetInvocationException ex)
                 {
+#if NETFX_CORE || WINDOWS_PHONE || NET_CLIENT
+                    throw ex.InnerException ?? ex;
+#else
                     var exDispachInfo = ExceptionDispatchInfo.Capture(ex.InnerException ?? ex);
                     exDispachInfo.Throw();
-                }
 #endif
+                }
+
                 return true;
             }
 
@@ -612,8 +615,8 @@ namespace EventAggregatorNet
                 }
                 catch (TargetInvocationException ex)
                 {
-#if NETFX_CORE || WINDOWS_PHONE || DOTNET_CLIENT
-                    throw;
+#if NETFX_CORE || WINDOWS_PHONE || NET_CLIENT
+                    throw ex.InnerException ?? ex;
 #else
                     var exDispachInfo = ExceptionDispatchInfo.Capture(ex.InnerException ?? ex);
                     exDispachInfo.Throw();
@@ -662,7 +665,7 @@ namespace EventAggregatorNet
 #endif
 
 #if NETFX_CORE
-                if (interfaces.Any(it => it.GetTypeInfo().IsGenericType && it.GetGenericTypeDefinition() == openType))
+                if (interfaces.Any(it => it.GetTypeInfo().IsGenericType && it.GetGenericTypeDefinition() == genericType))
 #else
                 if (interfaces.Any(it => it.IsGenericType && it.GetGenericTypeDefinition() == genericType))
 #endif
@@ -676,8 +679,11 @@ namespace EventAggregatorNet
                 if (givenType.IsGenericType && givenType.GetGenericTypeDefinition() == genericType)
 #endif
                     return true;
-
+#if NETFX_CORE
+                var baseType = givenType.GetTypeInfo().BaseType;
+#else
                 var baseType = givenType.BaseType;
+#endif
                 return baseType != null && IsAssignableToGenericType(baseType, genericType);
             }
 
