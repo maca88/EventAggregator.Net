@@ -17,7 +17,7 @@ namespace EventAggregatorNet
 
             return delegateListener;
         }
-
+#if SYNC_ONY
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Reliability", "CA2000:Dispose objects before losing scope")]
         public static IDisposable AddListenerAction<T>(this IEventSubscriptionManager eventAggregator, Func<T, Task> listener)
         {
@@ -29,8 +29,10 @@ namespace EventAggregatorNet
 
             return delegateListener;
         }
+#endif
     }
 
+#if SYNC_ONY
     public class DelegateListenerAsync<T> : IListenerAsync<T>, IDisposable
     {
         private readonly Func<T, Task> _listener;
@@ -61,6 +63,7 @@ namespace EventAggregatorNet
             }
         }
     }
+#endif
 
     public class DelegateListener<T> : IListener<T>, IDisposable
     {

@@ -69,6 +69,7 @@ namespace EventAggregatorNet
         void Handle(TMessage message);
     }
 
+#if SYNC_ONY
     /// <summary>
     /// Specifies a class that would like to receive particular messages.
     /// </summary>
@@ -84,7 +85,7 @@ namespace EventAggregatorNet
         /// </summary>
         Task Handle(TMessage message);
     }
-
+#endif
     /// <summary>
     /// Provides a way to add and remove a listener object from the EventAggregator
     /// </summary>
@@ -107,7 +108,7 @@ namespace EventAggregatorNet
         /// <param name="holdStrongReference">determines if the EventAggregator should hold a weak or strong reference to the listener object. If null it will use the Config level option unless overriden by the parameter.</param>
         /// <returns>Returns the current IEventSubscriptionManager to allow for easy fluent additions.</returns>
         IEventSubscriptionManager AddListener<T>(IListener<T> listener, bool? holdStrongReference = null);
-
+#if SYNC_ONY
         /// <summary>
         /// Adds the given listener object to the EventAggregator.
         /// </summary>
@@ -116,7 +117,7 @@ namespace EventAggregatorNet
         /// <param name="holdStrongReference">determines if the EventAggregator should hold a weak or strong reference to the listener object. If null it will use the Config level option unless overriden by the parameter.</param>
         /// <returns>Returns the current IEventSubscriptionManager to allow for easy fluent additions.</returns>
         IEventSubscriptionManager AddListener<T>(IListenerAsync<T> listener, bool? holdStrongReference = null);
-
+#endif
         /// <summary>
         /// Removes the listener object from the EventAggregator
         /// </summary>
@@ -134,7 +135,7 @@ namespace EventAggregatorNet
          System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1026:DefaultParametersShouldNotBeUsed")]
         void SendMessage<TMessage>(Action<Action> marshal = null)
             where TMessage : new();
-
+#if SYNC_ONY
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1026:DefaultParametersShouldNotBeUsed")]
         Task SendMessageAsync<TMessage>(TMessage message, Func<Func<Task>, Task> marshal = null);
 
@@ -142,6 +143,7 @@ namespace EventAggregatorNet
          System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1026:DefaultParametersShouldNotBeUsed")]
         Task SendMessageAsync<TMessage>(Func<Func<Task>, Task> marshal = null)
             where TMessage : new();
+#endif
     }
 
     public interface IEventAggregator : IEventPublisher, IEventSubscriptionManager
@@ -192,7 +194,7 @@ namespace EventAggregatorNet
         {
             SendMessage(new TMessage(), marshal);
         }
-
+#if SYNC_ONY
         /// <summary>
         /// This will send the message to each IListener that is subscribing to TMessage.
         /// </summary>
@@ -220,7 +222,7 @@ namespace EventAggregatorNet
         {
             await SendMessageAsync(new TMessage(), marshal);
         }
-
+#endif
         private void Call<TListener>(object message, Action<Action> marshaller)
             where TListener : class
         {
@@ -243,7 +245,7 @@ namespace EventAggregatorNet
                 _config.OnMessageNotPublishedBecauseZeroListeners(message);
             }
         }
-
+#if SYNC_ONY
         private async Task CallAsync<TListener>(object message, Func<Func<Task>, Task> marshaller)
             where TListener : class
         {
@@ -265,7 +267,7 @@ namespace EventAggregatorNet
                 _config.OnMessageNotPublishedBecauseZeroListeners(message);
             }
         }
-
+#endif
         public IEventSubscriptionManager AddListener(object listener)
         {
             return AddListener(listener, null);
@@ -290,14 +292,14 @@ namespace EventAggregatorNet
 
             return this;
         }
-
+#if SYNC_ONY
         public IEventSubscriptionManager AddListener<T>(IListenerAsync<T> listener, bool? holdStrongReference = null)
         {
             AddListener((object)listener, holdStrongReference);
 
             return this;
         }
-
+#endif
         public IEventSubscriptionManager RemoveListener(object listener)
         {
             _listeners.RemoveListener(listener);
@@ -363,7 +365,11 @@ namespace EventAggregatorNet
 
                     var listenerWrapper = new ListenerWrapper(listener, RemoveListenerWrapper, holdStrongReference, supportMessageInheritance);
                     if (listenerWrapper.Count == 0)
+#if SYNC_ONY
                         throw new ArgumentException("IListener<T> or IListenerAsync<T> is not implemented", "listener");
+#else
+                        throw new ArgumentException("IListener<T> is not implemented", "listener");
+#endif
                     _listeners.Add(listenerWrapper);
                 }
             }
@@ -425,8 +431,11 @@ namespace EventAggregatorNet
                     _reference = new WeakReferenceImpl(listener);
 
                 var listenerInterfaces = TypeHelper.GetBaseInterfaceType(listener.GetType())
-                                                   .Where(w => TypeHelper.DirectlyClosesGeneric(w, typeof (IListener<>)) || 
-                                                               TypeHelper.DirectlyClosesGeneric(w, typeof (IListenerAsync<>)));
+                                                   .Where(w => TypeHelper.DirectlyClosesGeneric(w, typeof (IListener<>))
+#if SYNC_ONY
+                                                   || TypeHelper.DirectlyClosesGeneric(w, typeof (IListenerAsync<>))
+#endif
+                                                   );
 
                 foreach (var listenerInterface in listenerInterfaces)
                 {
@@ -469,7 +478,7 @@ namespace EventAggregatorNet
                     wasHandled |= handler.TryHandle<TListener>(target, message);
                 }
             }
-
+#if SYNC_ONY
             public async Task<bool> TryHandleAsync<TListener>(object message)
                 where TListener : class
             {
@@ -487,7 +496,7 @@ namespace EventAggregatorNet
                 }
                 return wasHandled;
             }
-
+#endif
             public int Count
             {
                 get { return _handlers.Count; }
@@ -543,6 +552,7 @@ namespace EventAggregatorNet
                 }
 
                 if (!Handles<TListener>() && !HandlesMessage(message)) return false;
+#if SYNC_ONY
                 var isAsync = TypeHelper.IsAssignableToGenericType(target.GetType(), typeof(IListenerAsync<>));
                 try
                 {
@@ -555,7 +565,14 @@ namespace EventAggregatorNet
                         _handlerMethod.Invoke(target, new[] {message});
                     }
                 }
-#if NETFX_CORE || WINDOWS_PHONE || NET_CLIENT
+#else
+                try
+                {
+                     _handlerMethod.Invoke(target, new[] {message});
+                }
+#endif
+#if SYNC_ONY
+    #if NETFX_CORE || WINDOWS_PHONE || NET_CLIENT
                 catch (AggregateException ex)
                 {
                     if (ex.InnerException is TargetInvocationException)
@@ -564,7 +581,7 @@ namespace EventAggregatorNet
                     }
                     throw ex.InnerException;
                 }
-#else
+    #else
                 catch (AggregateException ex)
                 {
                     ExceptionDispatchInfo exDispachInfo;
@@ -578,6 +595,7 @@ namespace EventAggregatorNet
                     }
                     exDispachInfo.Throw();
                 }
+    #endif
 #endif
                 catch (TargetInvocationException ex)
                 {
@@ -592,7 +610,7 @@ namespace EventAggregatorNet
                 return true;
             }
 
-
+#if SYNC_ONY
             public async Task<bool> TryHandleAsync<TListener>(object target, object message)
                 where TListener : class
             {
@@ -624,6 +642,7 @@ namespace EventAggregatorNet
                 }
                 return true;
             }
+#endif
         }
 
         internal static class TypeHelper
@@ -761,7 +780,7 @@ namespace EventAggregatorNet
                 get { return _defaultThreadMarshaler; }
                 set { _defaultThreadMarshaler = value; }
             }
-
+#if SYNC_ONY
             private Func<Func<Task>, Task> _defaultThreadAsyncMarshaler = async action => await action();
 
             public Func<Func<Task>, Task> DefaultThreadAsyncMarshaler
@@ -769,7 +788,7 @@ namespace EventAggregatorNet
                 get { return _defaultThreadAsyncMarshaler; }
                 set { _defaultThreadAsyncMarshaler = value; }
             }
-
+#endif
             /// <summary>
             /// If true instructs the EventAggregator to hold onto a reference to all listener objects. You will then have to explicitly remove them from the EventAggrator.
             /// If false then a WeakReference is used and the garbage collector can remove the listener when not in scope any longer.
