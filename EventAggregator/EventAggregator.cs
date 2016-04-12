@@ -69,7 +69,7 @@ namespace EventAggregatorNet
         void Handle(TMessage message);
     }
 
-#if SYNC_ONY
+#if !SYNC_ONY
     /// <summary>
     /// Specifies a class that would like to receive particular messages.
     /// </summary>
@@ -108,7 +108,7 @@ namespace EventAggregatorNet
         /// <param name="holdStrongReference">determines if the EventAggregator should hold a weak or strong reference to the listener object. If null it will use the Config level option unless overriden by the parameter.</param>
         /// <returns>Returns the current IEventSubscriptionManager to allow for easy fluent additions.</returns>
         IEventSubscriptionManager AddListener<T>(IListener<T> listener, bool? holdStrongReference = null);
-#if SYNC_ONY
+#if !SYNC_ONY
         /// <summary>
         /// Adds the given listener object to the EventAggregator.
         /// </summary>
@@ -135,7 +135,7 @@ namespace EventAggregatorNet
          System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1026:DefaultParametersShouldNotBeUsed")]
         void SendMessage<TMessage>(Action<Action> marshal = null)
             where TMessage : new();
-#if SYNC_ONY
+#if !SYNC_ONY
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1026:DefaultParametersShouldNotBeUsed")]
         Task SendMessageAsync<TMessage>(TMessage message, Func<Func<Task>, Task> marshal = null);
 
@@ -194,7 +194,7 @@ namespace EventAggregatorNet
         {
             SendMessage(new TMessage(), marshal);
         }
-#if SYNC_ONY
+#if !SYNC_ONY
         /// <summary>
         /// This will send the message to each IListener that is subscribing to TMessage.
         /// </summary>
@@ -245,7 +245,7 @@ namespace EventAggregatorNet
                 _config.OnMessageNotPublishedBecauseZeroListeners(message);
             }
         }
-#if SYNC_ONY
+#if !SYNC_ONY
         private async Task CallAsync<TListener>(object message, Func<Func<Task>, Task> marshaller)
             where TListener : class
         {
@@ -292,7 +292,7 @@ namespace EventAggregatorNet
 
             return this;
         }
-#if SYNC_ONY
+#if !SYNC_ONY
         public IEventSubscriptionManager AddListener<T>(IListenerAsync<T> listener, bool? holdStrongReference = null)
         {
             AddListener((object)listener, holdStrongReference);
@@ -365,7 +365,7 @@ namespace EventAggregatorNet
 
                     var listenerWrapper = new ListenerWrapper(listener, RemoveListenerWrapper, holdStrongReference, supportMessageInheritance);
                     if (listenerWrapper.Count == 0)
-#if SYNC_ONY
+#if !SYNC_ONY
                         throw new ArgumentException("IListener<T> or IListenerAsync<T> is not implemented", "listener");
 #else
                         throw new ArgumentException("IListener<T> is not implemented", "listener");
@@ -432,7 +432,7 @@ namespace EventAggregatorNet
 
                 var listenerInterfaces = TypeHelper.GetBaseInterfaceType(listener.GetType())
                                                    .Where(w => TypeHelper.DirectlyClosesGeneric(w, typeof (IListener<>))
-#if SYNC_ONY
+#if !SYNC_ONY
                                                    || TypeHelper.DirectlyClosesGeneric(w, typeof (IListenerAsync<>))
 #endif
                                                    );
@@ -478,7 +478,7 @@ namespace EventAggregatorNet
                     wasHandled |= handler.TryHandle<TListener>(target, message);
                 }
             }
-#if SYNC_ONY
+#if !SYNC_ONY
             public async Task<bool> TryHandleAsync<TListener>(object message)
                 where TListener : class
             {
@@ -552,7 +552,7 @@ namespace EventAggregatorNet
                 }
 
                 if (!Handles<TListener>() && !HandlesMessage(message)) return false;
-#if SYNC_ONY
+#if !SYNC_ONY
                 var isAsync = TypeHelper.IsAssignableToGenericType(target.GetType(), typeof(IListenerAsync<>));
                 try
                 {
@@ -571,7 +571,7 @@ namespace EventAggregatorNet
                      _handlerMethod.Invoke(target, new[] {message});
                 }
 #endif
-#if SYNC_ONY
+#if !SYNC_ONY
     #if NETFX_CORE || WINDOWS_PHONE || NET_CLIENT
                 catch (AggregateException ex)
                 {
@@ -610,7 +610,7 @@ namespace EventAggregatorNet
                 return true;
             }
 
-#if SYNC_ONY
+#if !SYNC_ONY
             public async Task<bool> TryHandleAsync<TListener>(object target, object message)
                 where TListener : class
             {
@@ -780,7 +780,7 @@ namespace EventAggregatorNet
                 get { return _defaultThreadMarshaler; }
                 set { _defaultThreadMarshaler = value; }
             }
-#if SYNC_ONY
+#if !SYNC_ONY
             private Func<Func<Task>, Task> _defaultThreadAsyncMarshaler = async action => await action();
 
             public Func<Func<Task>, Task> DefaultThreadAsyncMarshaler
