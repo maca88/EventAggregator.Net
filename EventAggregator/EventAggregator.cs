@@ -1,4 +1,7 @@
 ﻿// ReSharper disable InconsistentNaming
+using System.Runtime.ExceptionServices;
+using System.Threading.Tasks;
+
 namespace EventAggregatorNet
 {
     using System;
@@ -67,6 +70,22 @@ namespace EventAggregatorNet
     }
 
     /// <summary>
+    /// Specifies a class that would like to receive particular messages.
+    /// </summary>
+    /// <typeparam name="TMessage">The type of message object to subscribe to.</typeparam>
+#if WINDOWS_PHONE
+    public interface IListenerAsync<TMessage>
+#else
+    public interface IListenerAsync<in TMessage>
+#endif
+    {
+        /// <summary>
+        /// This will be called every time a TMessage is published through the event aggregator
+        /// </summary>
+        Task Handle(TMessage message);
+    }
+
+    /// <summary>
     /// Provides a way to add and remove a listener object from the EventAggregator
     /// </summary>
     public interface IEventSubscriptionManager
@@ -90,6 +109,15 @@ namespace EventAggregatorNet
         IEventSubscriptionManager AddListener<T>(IListener<T> listener, bool? holdStrongReference = null);
 
         /// <summary>
+        /// Adds the given listener object to the EventAggregator.
+        /// </summary>
+        /// <typeparam name="T">Listener Message type</typeparam>
+        /// <param name="listener"></param>
+        /// <param name="holdStrongReference">determines if the EventAggregator should hold a weak or strong reference to the listener object. If null it will use the Config level option unless overriden by the parameter.</param>
+        /// <returns>Returns the current IEventSubscriptionManager to allow for easy fluent additions.</returns>
+        IEventSubscriptionManager AddListener<T>(IListenerAsync<T> listener, bool? holdStrongReference = null);
+
+        /// <summary>
         /// Removes the listener object from the EventAggregator
         /// </summary>
         /// <param name="listener">The object to be removed</param>
@@ -105,6 +133,14 @@ namespace EventAggregatorNet
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1004:GenericMethodsShouldProvideTypeParameter"),
          System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1026:DefaultParametersShouldNotBeUsed")]
         void SendMessage<TMessage>(Action<Action> marshal = null)
+            where TMessage : new();
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1026:DefaultParametersShouldNotBeUsed")]
+        Task SendMessageAsync<TMessage>(TMessage message, Func<Func<Task>, Task> marshal = null);
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1004:GenericMethodsShouldProvideTypeParameter"),
+         System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1026:DefaultParametersShouldNotBeUsed")]
+        Task SendMessageAsync<TMessage>(Func<Func<Task>, Task> marshal = null)
             where TMessage : new();
     }
 
@@ -157,6 +193,34 @@ namespace EventAggregatorNet
             SendMessage(new TMessage(), marshal);
         }
 
+        /// <summary>
+        /// This will send the message to each IListener that is subscribing to TMessage.
+        /// </summary>
+        /// <typeparam name="TMessage">The type of message being sent</typeparam>
+        /// <param name="message">The message instance</param>
+        /// <param name="marshal">You can optionally override how the message publication action is marshalled</param>
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1026:DefaultParametersShouldNotBeUsed")]
+        public async Task SendMessageAsync<TMessage>(TMessage message, Func<Func<Task>, Task> marshal = null)
+        {
+            if (marshal == null)
+                marshal = _config.DefaultThreadAsyncMarshaler;
+
+            await CallAsync<IListenerAsync<TMessage>>(message, marshal);
+        }
+
+        /// <summary>
+        /// This will create a new default instance of TMessage and send the message to each IListener that is subscribing to TMessage.
+        /// </summary>
+        /// <typeparam name="TMessage">The type of message being sent</typeparam>
+        /// <param name="marshal">You can optionally override how the message publication action is marshalled</param>
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1026:DefaultParametersShouldNotBeUsed"),
+         System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design",
+             "CA1004:GenericMethodsShouldProvideTypeParameter")]
+        public async Task SendMessageAsync<TMessage>(Func<Func<Task>, Task> marshal = null) where TMessage : new()
+        {
+            await SendMessageAsync(new TMessage(), marshal);
+        }
+
         private void Call<TListener>(object message, Action<Action> marshaller)
             where TListener : class
         {
@@ -171,6 +235,28 @@ namespace EventAggregatorNet
                             listenerCalledCount++;
                     }
                 });
+
+            var wasAnyListenerCalled = listenerCalledCount > 0;
+
+            if (!wasAnyListenerCalled)
+            {
+                _config.OnMessageNotPublishedBecauseZeroListeners(message);
+            }
+        }
+
+        private async Task CallAsync<TListener>(object message, Func<Func<Task>, Task> marshaller)
+            where TListener : class
+        {
+            int listenerCalledCount = 0;
+            await marshaller(async () =>
+            {
+                foreach (ListenerWrapper o in _listeners.Where(o => o.Handles<TListener>() || o.HandlesMessage(message)))
+                {
+                    bool wasThisOneCalled = await o.TryHandleAsync<TListener>(message);
+                    if (wasThisOneCalled)
+                        listenerCalledCount++;
+                }
+            });
 
             var wasAnyListenerCalled = listenerCalledCount > 0;
 
@@ -201,6 +287,13 @@ namespace EventAggregatorNet
         public IEventSubscriptionManager AddListener<T>(IListener<T> listener, bool? holdStrongReference)
         {
             AddListener((object) listener, holdStrongReference);
+
+            return this;
+        }
+
+        public IEventSubscriptionManager AddListener<T>(IListenerAsync<T> listener, bool? holdStrongReference = null)
+        {
+            AddListener((object)listener, holdStrongReference);
 
             return this;
         }
@@ -270,7 +363,7 @@ namespace EventAggregatorNet
 
                     var listenerWrapper = new ListenerWrapper(listener, RemoveListenerWrapper, holdStrongReference, supportMessageInheritance);
                     if (listenerWrapper.Count == 0)
-                        throw new ArgumentException("IListener<T> is not implemented", "listener");
+                        throw new ArgumentException("IListener<T> or IListenerAsync<T> is not implemented", "listener");
                     _listeners.Add(listenerWrapper);
                 }
             }
@@ -332,7 +425,8 @@ namespace EventAggregatorNet
                     _reference = new WeakReferenceImpl(listener);
 
                 var listenerInterfaces = TypeHelper.GetBaseInterfaceType(listener.GetType())
-                                                   .Where(w => TypeHelper.DirectlyClosesGeneric(w, typeof (IListener<>)));
+                                                   .Where(w => TypeHelper.DirectlyClosesGeneric(w, typeof (IListener<>)) || 
+                                                               TypeHelper.DirectlyClosesGeneric(w, typeof (IListenerAsync<>)));
 
                 foreach (var listenerInterface in listenerInterfaces)
                 {
@@ -372,10 +466,26 @@ namespace EventAggregatorNet
 
                 foreach (var handler in _handlers)
                 {
-                    bool thisOneHandled = false;
-                    handler.TryHandle<TListener>(target, message, out thisOneHandled);
-                    wasHandled |= thisOneHandled;
+                    wasHandled |= handler.TryHandle<TListener>(target, message);
                 }
+            }
+
+            public async Task<bool> TryHandleAsync<TListener>(object message)
+                where TListener : class
+            {
+                var target = _reference.Target;
+                var wasHandled = false;
+                if (target == null)
+                {
+                    _onRemoveCallback(this);
+                    return false;
+                }
+
+                foreach (var handler in _handlers)
+                {
+                    wasHandled |= await handler.TryHandleAsync<TListener>(target, message);
+                }
+                return wasHandled;
             }
 
             public int Count
@@ -424,19 +534,92 @@ namespace EventAggregatorNet
                 return handled;
             }
 
-            public void TryHandle<TListener>(object target, object message, out bool wasHandled)
+            public bool TryHandle<TListener>(object target, object message)
                 where TListener : class
             {
-                wasHandled = false;
                 if (target == null)
                 {
-                    return;
+                    return false;
                 }
 
-                if (!Handles<TListener>() && !HandlesMessage(message)) return;
+                if (!Handles<TListener>() && !HandlesMessage(message)) return false;
+                var isAsync = TypeHelper.IsAssignableToGenericType(target.GetType(), typeof(IListenerAsync<>));
+                try
+                {
+                    if (isAsync)
+                    {
+                        ((dynamic) _handlerMethod.Invoke(target, new[] {message})).Wait();
+                    }
+                    else
+                    {
+                        _handlerMethod.Invoke(target, new[] {message});
+                    }
+                }
+#if NETFX_CORE || WINDOWS_PHONE || DOTNET_CLIENT
+                catch (AggregateException ex)
+                {
+                    if (ex.InnerException is TargetInvocationException)
+                    {
+                        throw ex.InnerException.InnerException;
+                    }
+                    throw ex.InnerException;
+                }
+#else
+                catch (AggregateException ex)
+                {
+                    ExceptionDispatchInfo exDispachInfo;
+                    if (ex.InnerException is TargetInvocationException)
+                    {
+                        exDispachInfo = ExceptionDispatchInfo.Capture(ex.InnerException.InnerException ?? ex);
+                    }
+                    else
+                    {
+                        exDispachInfo = ExceptionDispatchInfo.Capture(ex.InnerException ?? ex);
+                    }
+                    exDispachInfo.Throw();
+                }
+#endif
+#if !NETFX_CORE && !WINDOWS_PHONE && !DOTNET_CLIENT
+                catch (TargetInvocationException ex)
+                {
+                    var exDispachInfo = ExceptionDispatchInfo.Capture(ex.InnerException ?? ex);
+                    exDispachInfo.Throw();
+                }
+#endif
+                return true;
+            }
 
-                _handlerMethod.Invoke(target, new[] {message});
-                wasHandled = true;
+
+            public async Task<bool> TryHandleAsync<TListener>(object target, object message)
+                where TListener : class
+            {
+                if (target == null)
+                {
+                    return false;
+                }
+                if (!Handles<TListener>() && !HandlesMessage(message)) return false;
+                var isAsync = TypeHelper.IsAssignableToGenericType(target.GetType(), typeof(IListenerAsync<>));
+                try
+                {
+                    if (isAsync)
+                    {
+                        await (dynamic) _handlerMethod.Invoke(target, new[] {message});
+                    }
+                    else
+                    {
+                        _handlerMethod.Invoke(target, new[] { message });
+                    }
+                }
+                catch (TargetInvocationException ex)
+                {
+#if NETFX_CORE || WINDOWS_PHONE || DOTNET_CLIENT
+                    throw;
+#else
+                    var exDispachInfo = ExceptionDispatchInfo.Capture(ex.InnerException ?? ex);
+                    exDispachInfo.Throw();
+#endif
+                }
+                return true;
             }
         }
 
@@ -468,6 +651,34 @@ namespace EventAggregatorNet
                 }
 
                 return interfaces.Distinct();
+            }
+
+            internal static bool IsAssignableToGenericType(Type givenType, Type genericType)
+            {
+#if NETFX_CORE
+                var interfaces = givenType.GetTypeInfo().ImplementedInterfaces;
+#else
+                var interfaces = givenType.GetInterfaces();
+#endif
+
+#if NETFX_CORE
+                if (interfaces.Any(it => it.GetTypeInfo().IsGenericType && it.GetGenericTypeDefinition() == openType))
+#else
+                if (interfaces.Any(it => it.IsGenericType && it.GetGenericTypeDefinition() == genericType))
+#endif
+                {
+                    return true;
+                }
+
+#if NETFX_CORE
+                if (givenType.GetTypeInfo().IsGenericType && givenType.GetGenericTypeDefinition() == genericType)
+#else
+                if (givenType.IsGenericType && givenType.GetGenericTypeDefinition() == genericType)
+#endif
+                    return true;
+
+                var baseType = givenType.BaseType;
+                return baseType != null && IsAssignableToGenericType(baseType, genericType);
             }
 
             internal static bool DirectlyClosesGeneric(Type type, Type openType)
@@ -543,6 +754,14 @@ namespace EventAggregatorNet
             {
                 get { return _defaultThreadMarshaler; }
                 set { _defaultThreadMarshaler = value; }
+            }
+
+            private Func<Func<Task>, Task> _defaultThreadAsyncMarshaler = async action => await action();
+
+            public Func<Func<Task>, Task> DefaultThreadAsyncMarshaler
+            {
+                get { return _defaultThreadAsyncMarshaler; }
+                set { _defaultThreadAsyncMarshaler = value; }
             }
 
             /// <summary>
