@@ -22,7 +22,7 @@
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;UNWRAP_EX;ASYNC</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <Prefer32Bit>false</Prefer32Bit>
@@ -58,6 +58,12 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\EventAggregator\EventAggregator.cs">
+      <Link>EventAggregator.cs</Link>
+    </Compile>
+    <Compile Include="..\EventAggregator\EventAggregatorExtensions.cs">
+      <Link>EventAggregatorExtensions.cs</Link>
+    </Compile>
     <Compile Include="MessageInheritanceTests.cs" />
     <Compile Include="SendMessageWithBaseTypeTests.cs" />
     <Compile Include="EventAggregatorExtensionTests.cs" />
@@ -70,12 +76,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\EventAggregator\EventAggregator.Net.csproj">
-      <Project>{5DE30455-5DB4-418B-B655-5D903DF6966A}</Project>
-      <Name>EventAggregator.Net</Name>
-    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Service Include="{82A7F48D-3B50-4B1E-B82E-3ADA8210C358}" />

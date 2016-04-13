@@ -18,6 +18,20 @@ namespace EventAggregatorNet.Tests
 		}
 
         [Fact]
+		public void Can_use_unsubscribe_from_delegate_handler()
+		{
+            var eventAggregator = new EventAggregator();
+			SomeMessage messageTrapped = null;
+
+			var disposable = eventAggregator.AddListenerAction<SomeMessage>(msg => { messageTrapped = msg; });
+			disposable.Dispose();
+			eventAggregator.SendMessage<SomeMessage>();
+
+			messageTrapped.ShouldBeNull();
+		}
+
+#if ASYNC
+        [Fact]
         public async Task Can_use_delegate_to_subscribe_to_message_async()
         {
             var eventAggregator = new EventAggregator();
@@ -32,20 +46,6 @@ namespace EventAggregatorNet.Tests
 
             messageTrapped.ShouldNotBeNull();
         }
-
-
-        [Fact]
-		public void Can_use_unsubscribe_from_delegate_handler()
-		{
-            var eventAggregator = new EventAggregator();
-			SomeMessage messageTrapped = null;
-
-			var disposable = eventAggregator.AddListenerAction<SomeMessage>(msg => { messageTrapped = msg; });
-			disposable.Dispose();
-			eventAggregator.SendMessage<SomeMessage>();
-
-			messageTrapped.ShouldBeNull();
-		}
 
         [Fact]
         public async Task Can_use_unsubscribe_from_delegate_handler_async()
@@ -63,5 +63,7 @@ namespace EventAggregatorNet.Tests
 
             messageTrapped.ShouldBeNull();
         }
+#endif
     }
+
 }

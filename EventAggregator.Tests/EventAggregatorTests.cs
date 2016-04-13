@@ -20,71 +20,103 @@ namespace EventAggregatorNet.Tests
             someMessageHandler.EventsTrapped.Count().ShouldEqual(1);
         }
 
+#if !UNWRAP_EX
         [Fact]
-        public async Task Should_send_message_async()
-        {
-            var someMessageHandler = new SomeMessageHandlerAsync();
-            var eventAggregator = new EventAggregator();
-
-            eventAggregator.AddListener(someMessageHandler);
-            await eventAggregator.SendMessageAsync<SomeMessage>();
-            someMessageHandler.EventsTrapped.Count().ShouldEqual(1);
-        }
-
-        [Fact]
-        public void Should_send_message_when_mixing_async_nonasync_listners()
-        {
-            var someMessageHandler = new SomeMessageHandler();
-            var someMessageHandlerAsync = new SomeMessageHandlerAsync();
-            var eventAggregator = new EventAggregator();
-
-            eventAggregator.AddListener(someMessageHandler);
-            eventAggregator.AddListener(someMessageHandlerAsync);
-            eventAggregator.SendMessage<SomeMessage>();
-            someMessageHandler.EventsTrapped.Count().ShouldEqual(1);
-            someMessageHandlerAsync.EventsTrapped.Count().ShouldEqual(1);
-        }
-
-        [Fact]
-        public void Should_throws_invalid_operation_exception()
+        public void Should_throws_target_invocation_exception_when_send_sync_to_sync_listener()
         {
             var someMessageHandler = new SomeMessageHandler4();
             var eventAggregator = new EventAggregator();
 
             eventAggregator.AddListener(someMessageHandler);
 
+            Assert.Throws<TargetInvocationException>(() => eventAggregator.SendMessage<SomeMessage>());
+        }
+
+        [Fact]
+        public void Should_throws_target_invocation_exception_with_target_invocation_inner_exception_when_send_sync_to_sync_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler5();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            try
+            {
+                eventAggregator.SendMessage<SomeMessage>();
+            }
+            catch(TargetInvocationException ex) 
+            {
+                Assert.IsType<TargetInvocationException>(ex.InnerException);
+                Assert.IsType<FakeException>(ex.InnerException.InnerException);
+            }
+        }
+
+        [Fact]
+        public void Should_throws_target_invocation_exception_with_aggregate_inner_exception_when_send_sync_to_sync_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler6();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            try
+            {
+                eventAggregator.SendMessage<SomeMessage>();
+            }
+            catch (TargetInvocationException ex)
+            {
+                Assert.IsType<AggregateException>(ex.InnerException);
+                Assert.IsType<FakeException>(ex.InnerException.InnerException);
+            }
+        }
+#else
+        [Fact]
+        public void Should_throws_invalid_operation_exception_when_send_sync_to_sync_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler4();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
             Assert.Throws<InvalidOperationException>(() => eventAggregator.SendMessage<SomeMessage>());
         }
 
         [Fact]
-        public async Task Should_throws_invalid_operation_exception_async()
+        public void Should_throws_target_invocation_exception_when_send_sync_to_sync_listener()
         {
-            var someMessageHandler = new SomeMessageHandler4();
+            var someMessageHandler = new SomeMessageHandler5();
             var eventAggregator = new EventAggregator();
 
             eventAggregator.AddListener(someMessageHandler);
-
-            await Assert.ThrowsAsync<InvalidOperationException>(async () => await eventAggregator.SendMessageAsync<SomeMessage>());
+            try
+            {
+                eventAggregator.SendMessage<SomeMessage>();
+            }
+            catch (TargetInvocationException ex)
+            {
+                Assert.IsType<FakeException>(ex.InnerException);
+            }
         }
 
         [Fact]
-        public async Task Should_send_message_async_when_mixing_async_nonasync_listners()
+        public void Should_throws_aggregate_exception_when_send_sync_to_sync_listener()
         {
-            var someMessageHandler = new SomeMessageHandler();
-            var someMessageHandlerAsync = new SomeMessageHandlerAsync();
+            var someMessageHandler = new SomeMessageHandler6();
             var eventAggregator = new EventAggregator();
 
             eventAggregator.AddListener(someMessageHandler);
-            eventAggregator.AddListener(someMessageHandlerAsync);
-            await eventAggregator.SendMessageAsync<SomeMessage>();
-            someMessageHandler.EventsTrapped.Count().ShouldEqual(1);
-            someMessageHandlerAsync.EventsTrapped.Count().ShouldEqual(1);
+            try
+            {
+                eventAggregator.SendMessage<SomeMessage>();
+            }
+            catch (AggregateException ex)
+            {
+                Assert.IsType<FakeException>(ex.InnerException);
+            }
         }
+#endif
 
         [Fact]
-        public void
-            When_a_listener_has_been_garbage_collected_and_an_event_is_published_the_zombied_handler_should_be_removed
-            ()
+        public void When_a_listener_has_been_garbage_collected_and_an_event_is_published_the_zombied_handler_should_be_removed()
         {
             var eventAggregator = new EventAggregator();
 
@@ -92,21 +124,6 @@ namespace EventAggregatorNet.Tests
             GC.Collect();
 
             eventAggregator.SendMessage<SomeMessage>();
-
-            eventAggregator.GetListeners().Count().ShouldEqual(0);
-        }
-
-        [Fact]
-        public async Task
-            When_a_listener_has_been_garbage_collected_and_an_event_is_published_async_the_zombied_handler_should_be_removed
-            ()
-        {
-            var eventAggregator = new EventAggregator();
-
-            AddHandlerInScopeThatWillRemoveInstanceWhenGarbageCollected(eventAggregator);
-            GC.Collect();
-
-            await eventAggregator.SendMessageAsync<SomeMessage>();
 
             eventAggregator.GetListeners().Count().ShouldEqual(0);
         }
@@ -119,9 +136,7 @@ namespace EventAggregatorNet.Tests
         }
 
         [Fact]
-        public void
-            When_instructed_to_hold_a_strong_reference_by_default_and_the_listener_is_attempted__been_garbage_collected_and_an_event_is_published_the_zombied_handler_should_be_removed
-            ()
+        public void When_instructed_to_hold_a_strong_reference_by_default_and_the_listener_is_attempted__been_garbage_collected_and_an_event_is_published_the_zombied_handler_should_be_removed()
         {
             var config = new EventAggregator.Config
             {
@@ -137,29 +152,10 @@ namespace EventAggregatorNet.Tests
             eventAggregator.GetListeners().Count().ShouldEqual(1);
         }
 
-        [Fact]
-        public async Task
-            When_instructed_to_hold_a_strong_reference_by_default_and_the_listener_is_attempted__been_garbage_collected_and_an_event_is_published_async_the_zombied_handler_should_be_removed
-            ()
-        {
-            var config = new EventAggregator.Config
-            {
-                HoldReferences = true
-            };
-            var eventAggregator = new EventAggregator(config);
-
-            AddHandlerInScopeThatWillRemoveInstanceWhenGarbageCollected(eventAggregator, null);
-            GC.Collect();
-
-            await eventAggregator.SendMessageAsync<SomeMessage>();
-
-            eventAggregator.GetListeners().Count().ShouldEqual(1);
-        }
+        
 
         [Fact]
-        public void
-            When_instructed_to_hold_a_strong_reference_and_the_listener_is_attempted__been_garbage_collected_and_an_event_is_published_the_zombied_handler_should_be_removed
-            ()
+        public void When_instructed_to_hold_a_strong_reference_and_the_listener_is_attempted__been_garbage_collected_and_an_event_is_published_the_zombied_handler_should_be_removed()
         {
             var config = new EventAggregator.Config
             {
@@ -175,24 +171,7 @@ namespace EventAggregatorNet.Tests
             eventAggregator.GetListeners().Count().ShouldEqual(1);
         }
 
-        [Fact]
-        public async Task
-            When_instructed_to_hold_a_strong_reference_and_the_listener_is_attempted__been_garbage_collected_and_an_event_is_published_async_the_zombied_handler_should_be_removed
-            ()
-        {
-            var config = new EventAggregator.Config
-            {
-                HoldReferences = true
-            };
-            var eventAggregator = new EventAggregator(config);
-
-            AddHandlerInScopeThatWillRemoveInstanceWhenGarbageCollected(eventAggregator, true);
-            GC.Collect();
-
-            await eventAggregator.SendMessageAsync<SomeMessage>();
-
-            eventAggregator.GetListeners().Count().ShouldEqual(1);
-        }
+        
 
         [Fact]
         public void Can_remove_a_good_listener_with_a_zombied_listener()
@@ -216,6 +195,459 @@ namespace EventAggregatorNet.Tests
 
             // after call to SendMessage, the zombied listener should be removed.
             eventAggregator.GetListeners().Count().ShouldEqual(0);
+        }
+
+        [Fact]
+        public void Can_unsubscribe_manually()
+        {
+            var someMessageHandler = new SomeMessageHandler();
+            var eventAggregator = new EventAggregator();
+            eventAggregator.AddListener(someMessageHandler);
+            eventAggregator.SendMessage<SomeMessage>();
+            someMessageHandler.EventsTrapped.Count().ShouldEqual(1);
+
+
+            eventAggregator.RemoveListener(someMessageHandler);
+            eventAggregator.SendMessage<SomeMessage>();
+
+            someMessageHandler.EventsTrapped.Count().ShouldEqual(1);
+        }
+
+
+        [Fact]
+        public void When_no_subscribers_can_detect_nothing_was_published()
+        {
+            var config = new EventAggregator.Config();
+            bool warningWasCalled = false;
+            config.OnMessageNotPublishedBecauseZeroListeners = msg => { warningWasCalled = true; };
+            var eventAggregator = new EventAggregator(config);
+
+            eventAggregator.SendMessage<SomeMessage>();
+
+            warningWasCalled.ShouldBeTrue();
+        }
+
+
+        [Fact]
+        public void When_object_has_multiple_listeners_should_subscribe_to_all()
+        {
+            var eventAggregator = new EventAggregator();
+            var handler = new SomeMessageHandler2();
+            eventAggregator.AddListener(handler);
+            eventAggregator.SendMessage<SomeMessage>();
+            eventAggregator.SendMessage<SomeMessage2>();
+
+            handler.EventsTrapped.Count().ShouldEqual(2);
+        }
+
+
+        [Fact]
+        public void When_object_has_multiple_listeners_defined_in_an_interface_should_subscribe_to_all()
+        {
+            var eventAggregator = new EventAggregator();
+            var handler = new SomeMessageHandler3();
+            eventAggregator.AddListener(handler);
+            eventAggregator.SendMessage<SomeMessage>();
+            eventAggregator.SendMessage<SomeMessage2>();
+
+            handler.EventsTrapped.Count().ShouldEqual(2);
+        }
+
+        [Fact]
+        public void Should_throw_when_null_listener_added()
+        {
+            var eventAggregator = new EventAggregator();
+            typeof(ArgumentNullException).ShouldBeThrownBy(() => eventAggregator.AddListener(null, null));
+        }
+
+        [Fact]
+        public void Should_throw_when_listener_with_no_interfaces_added()
+        {
+            var eventAggregator = new EventAggregator();
+            NoListenerInterfaces noListenerInterfaces = new NoListenerInterfaces();
+            typeof(ArgumentException).ShouldBeThrownBy(() => eventAggregator.AddListener(noListenerInterfaces, null));
+        }
+
+#if ASYNC
+        [Fact]
+        public void Should_send_message_when_mixing_async_nonasync_listners()
+        {
+            var someMessageHandler = new SomeMessageHandler();
+            var someMessageHandlerAsync = new SomeMessageHandlerAsync();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+            eventAggregator.AddListener(someMessageHandlerAsync);
+            eventAggregator.SendMessage<SomeMessage>();
+            someMessageHandler.EventsTrapped.Count().ShouldEqual(1);
+            someMessageHandlerAsync.EventsTrapped.Count().ShouldEqual(1);
+        }
+
+        [Fact]
+        public async Task Should_send_message_async()
+        {
+            var someMessageHandler = new SomeMessageHandlerAsync();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+            await eventAggregator.SendMessageAsync<SomeMessage>();
+            someMessageHandler.EventsTrapped.Count().ShouldEqual(1);
+        }
+#if UNWRAP_EX
+        [Fact]
+        public async Task Should_throws_invalid_operation_exception_when_send_async_to_sync_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler4();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await eventAggregator.SendMessageAsync<SomeMessage>());
+        }
+
+        [Fact]
+        public async Task Should_throws_invalid_operation_exception_when_send_async_to_async_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler4Async();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await eventAggregator.SendMessageAsync<SomeMessage>());
+        }
+
+        [Fact]
+        public void Should_throws_invalid_operation_exception_when_send_sync_to_async_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler4Async();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            Assert.Throws<InvalidOperationException>(() => eventAggregator.SendMessage<SomeMessage>());
+        }
+
+        [Fact]
+        public async Task Should_throws_target_invocation_exception_with_fake_inner_exception_when_send_async_to_sync_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler5();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            try
+            {
+                await eventAggregator.SendMessageAsync<SomeMessage>();
+            }
+            catch (TargetInvocationException ex)
+            {
+                Assert.IsType<FakeException>(ex.InnerException);
+            }
+        }
+
+        [Fact]
+        public async Task Should_throws_target_invocation_exception_with_fake_inner_exception_when_send_async_to_async_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler5Async();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            try
+            {
+                await eventAggregator.SendMessageAsync<SomeMessage>();
+            }
+            catch (TargetInvocationException ex)
+            {
+                Assert.IsType<FakeException>(ex.InnerException);
+            }
+        }
+
+        [Fact]
+        public void Should_throws_target_invocation_exception_with_fake_inner_exception_when_send_sync_to_async_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler5Async();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            try
+            {
+                eventAggregator.SendMessage<SomeMessage>();
+            }
+            catch (TargetInvocationException ex)
+            {
+                Assert.IsType<FakeException>(ex.InnerException);
+            }
+        }
+
+        [Fact]
+        public async Task Should_throws_aggregate_exception_with_fake_inner_exception_when_send_async_to_sync_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler6();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            try
+            {
+                await eventAggregator.SendMessageAsync<SomeMessage>();
+            }
+            catch (AggregateException ex)
+            {
+                Assert.IsType<FakeException>(ex.InnerException);
+            }
+        }
+
+        [Fact]
+        public async Task Should_throws_aggregate_exception_with_fake_inner_exception_when_send_async_to_async_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler6Async();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            try
+            {
+                await eventAggregator.SendMessageAsync<SomeMessage>();
+            }
+            catch (AggregateException ex)
+            {
+                Assert.IsType<FakeException>(ex.InnerException);
+            }
+        }
+
+        [Fact]
+        public void Should_throws_aggregate_exception_with_fake_inner_exception_when_send_sync_to_async_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler6Async();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            try
+            {
+                eventAggregator.SendMessage<SomeMessage>();
+            }
+            catch (AggregateException ex)
+            {
+                Assert.IsType<FakeException>(ex.InnerException);
+            }
+        }
+
+#else
+        [Fact]
+        public async Task Should_throws_target_invocation_exception_when_send_async_to_sync_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler4();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            await Assert.ThrowsAsync<TargetInvocationException>(async () => await eventAggregator.SendMessageAsync<SomeMessage>());
+        }
+
+        [Fact]
+        public async Task Should_throws_invalid_operation_exception_when_send_async_to_async_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler4Async();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await eventAggregator.SendMessageAsync<SomeMessage>());
+        }
+
+        [Fact]
+        public void Should_throws_aggregate_exception_with_invalid_operation_inner_exception_when_send_sync_to_async_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler4Async();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            try
+            {
+                eventAggregator.SendMessage<SomeMessage>();
+            }
+            catch (AggregateException ex)
+            {
+                Assert.IsType<InvalidOperationException>(ex.InnerException);
+            }
+        }
+
+        [Fact]
+        public async Task Should_throws_target_invocation_exception_when_send_async_to_async_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler5Async();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            try
+            {
+                await eventAggregator.SendMessageAsync<SomeMessage>();
+            }
+            catch (TargetInvocationException ex)
+            {
+                Assert.IsType<FakeException>(ex.InnerException);
+            }
+        }
+
+        [Fact]
+        public async Task Should_throws_target_invocation_exception_with_target_invocation_inner_exception_when_send_async_to_sync_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler5();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            try
+            {
+                await eventAggregator.SendMessageAsync<SomeMessage>();
+            }
+            catch (TargetInvocationException ex)
+            {
+                Assert.IsType<TargetInvocationException>(ex.InnerException);
+                Assert.IsType<FakeException>(ex.InnerException.InnerException);
+            }
+        }
+
+        [Fact]
+        public void Should_throws_aggregate_exception_with_target_invocation_inner_exception_when_send_sync_to_async_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler5Async();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            try
+            {
+                eventAggregator.SendMessage<SomeMessage>();
+            }
+            catch (AggregateException ex)
+            {
+                Assert.IsType<TargetInvocationException>(ex.InnerException);
+                Assert.IsType<FakeException>(ex.InnerException.InnerException);
+            }
+        }
+
+        [Fact]
+        public async Task Should_throws_aggregate_exception_when_send_async_to_async_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler6Async();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            try
+            {
+                await eventAggregator.SendMessageAsync<SomeMessage>();
+            }
+            catch (AggregateException ex)
+            {
+                Assert.IsType<FakeException>(ex.InnerException);
+            }
+        }
+
+        [Fact]
+        public async Task Should_throws_target_invocation_exception_with_aggregate_inner_exception_when_send_async_to_sync_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler6();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            try
+            {
+                await eventAggregator.SendMessageAsync<SomeMessage>();
+            }
+            catch (TargetInvocationException ex)
+            {
+                Assert.IsType<AggregateException>(ex.InnerException);
+                Assert.IsType<FakeException>(ex.InnerException.InnerException);
+            }
+        }
+
+        [Fact]
+        public void Should_throws_aggreate_exception_with_aggregate_inner_exception_when_send_sync_to_async_listener()
+        {
+            var someMessageHandler = new SomeMessageHandler6Async();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+
+            try
+            {
+                eventAggregator.SendMessage<SomeMessage>();
+            }
+            catch (AggregateException ex)
+            {
+                Assert.IsType<AggregateException>(ex.InnerException);
+                Assert.IsType<FakeException>(ex.InnerException.InnerException);
+            }
+        }
+#endif
+
+        [Fact]
+        public async Task Should_send_message_async_when_mixing_async_nonasync_listners()
+        {
+            var someMessageHandler = new SomeMessageHandler();
+            var someMessageHandlerAsync = new SomeMessageHandlerAsync();
+            var eventAggregator = new EventAggregator();
+
+            eventAggregator.AddListener(someMessageHandler);
+            eventAggregator.AddListener(someMessageHandlerAsync);
+            await eventAggregator.SendMessageAsync<SomeMessage>();
+            someMessageHandler.EventsTrapped.Count().ShouldEqual(1);
+            someMessageHandlerAsync.EventsTrapped.Count().ShouldEqual(1);
+        }
+
+        [Fact]
+        public async Task When_a_listener_has_been_garbage_collected_and_an_event_is_published_async_the_zombied_handler_should_be_removed()
+        {
+            var eventAggregator = new EventAggregator();
+
+            AddHandlerInScopeThatWillRemoveInstanceWhenGarbageCollected(eventAggregator);
+            GC.Collect();
+
+            await eventAggregator.SendMessageAsync<SomeMessage>();
+
+            eventAggregator.GetListeners().Count().ShouldEqual(0);
+        }
+
+        [Fact]
+        public async Task When_instructed_to_hold_a_strong_reference_by_default_and_the_listener_is_attempted__been_garbage_collected_and_an_event_is_published_async_the_zombied_handler_should_be_removed()
+        {
+            var config = new EventAggregator.Config
+            {
+                HoldReferences = true
+            };
+            var eventAggregator = new EventAggregator(config);
+
+            AddHandlerInScopeThatWillRemoveInstanceWhenGarbageCollected(eventAggregator, null);
+            GC.Collect();
+
+            await eventAggregator.SendMessageAsync<SomeMessage>();
+
+            eventAggregator.GetListeners().Count().ShouldEqual(1);
+        }
+
+        [Fact]
+        public async Task When_instructed_to_hold_a_strong_reference_and_the_listener_is_attempted__been_garbage_collected_and_an_event_is_published_async_the_zombied_handler_should_be_removed()
+        {
+            var config = new EventAggregator.Config
+            {
+                HoldReferences = true
+            };
+            var eventAggregator = new EventAggregator(config);
+
+            AddHandlerInScopeThatWillRemoveInstanceWhenGarbageCollected(eventAggregator, true);
+            GC.Collect();
+
+            await eventAggregator.SendMessageAsync<SomeMessage>();
+
+            eventAggregator.GetListeners().Count().ShouldEqual(1);
         }
 
         [Fact]
@@ -243,22 +675,6 @@ namespace EventAggregatorNet.Tests
         }
 
         [Fact]
-        public void Can_unsubscribe_manually()
-        {
-            var someMessageHandler = new SomeMessageHandler();
-            var eventAggregator = new EventAggregator();
-            eventAggregator.AddListener(someMessageHandler);
-            eventAggregator.SendMessage<SomeMessage>();
-            someMessageHandler.EventsTrapped.Count().ShouldEqual(1);
-
-
-            eventAggregator.RemoveListener(someMessageHandler);
-            eventAggregator.SendMessage<SomeMessage>();
-
-            someMessageHandler.EventsTrapped.Count().ShouldEqual(1);
-        }
-
-        [Fact]
         public async Task Can_unsubscribe_manually_async()
         {
             var someMessageHandler = new SomeMessageHandlerAsync();
@@ -275,19 +691,6 @@ namespace EventAggregatorNet.Tests
         }
 
         [Fact]
-        public void When_no_subscribers_can_detect_nothing_was_published()
-        {
-            var config = new EventAggregator.Config();
-            bool warningWasCalled = false;
-            config.OnMessageNotPublishedBecauseZeroListeners = msg => { warningWasCalled = true; };
-            var eventAggregator = new EventAggregator(config);
-
-            eventAggregator.SendMessage<SomeMessage>();
-
-            warningWasCalled.ShouldBeTrue();
-        }
-
-        [Fact]
         public async Task When_no_subscribers_can_detect_nothing_was_published_async()
         {
             var config = new EventAggregator.Config();
@@ -301,18 +704,6 @@ namespace EventAggregatorNet.Tests
         }
 
         [Fact]
-        public void When_object_has_multiple_listeners_should_subscribe_to_all()
-        {
-            var eventAggregator = new EventAggregator();
-            var handler = new SomeMessageHandler2();
-            eventAggregator.AddListener(handler);
-            eventAggregator.SendMessage<SomeMessage>();
-            eventAggregator.SendMessage<SomeMessage2>();
-
-            handler.EventsTrapped.Count().ShouldEqual(2);
-        }
-
-        [Fact]
         public async Task When_object_has_multiple_listeners_should_subscribe_to_all_async()
         {
             var eventAggregator = new EventAggregator();
@@ -320,18 +711,6 @@ namespace EventAggregatorNet.Tests
             eventAggregator.AddListener(handler);
             await eventAggregator.SendMessageAsync<SomeMessage>();
             await eventAggregator.SendMessageAsync<SomeMessage2>();
-
-            handler.EventsTrapped.Count().ShouldEqual(2);
-        }
-
-        [Fact]
-        public void When_object_has_multiple_listeners_defined_in_an_interface_should_subscribe_to_all()
-        {
-            var eventAggregator = new EventAggregator();
-            var handler = new SomeMessageHandler3();
-            eventAggregator.AddListener(handler);
-            eventAggregator.SendMessage<SomeMessage>();
-            eventAggregator.SendMessage<SomeMessage2>();
 
             handler.EventsTrapped.Count().ShouldEqual(2);
         }
@@ -348,20 +727,7 @@ namespace EventAggregatorNet.Tests
             handler.EventsTrapped.Count().ShouldEqual(2);
         }
 
-        [Fact]
-        public void Should_throw_when_null_listener_added()
-        {
-            var eventAggregator = new EventAggregator();
-            typeof (ArgumentNullException).ShouldBeThrownBy(() => eventAggregator.AddListener(null, null));
-        }
-
-        [Fact]
-        public void Should_throw_when_listener_with_no_interfaces_added()
-        {
-            var eventAggregator = new EventAggregator();
-            NoListenerInterfaces noListenerInterfaces = new NoListenerInterfaces();
-            typeof (ArgumentException).ShouldBeThrownBy(() => eventAggregator.AddListener(noListenerInterfaces, null));
-        }
+#endif
 
         public class NoListenerInterfaces // No IListener interfaces
         {

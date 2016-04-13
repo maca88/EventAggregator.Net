@@ -4,6 +4,7 @@ using EventAggregator.Net.SampleUsage;
 
 namespace EventAggregatorNet.SampleUsage.Samples
 {
+#if ASYNC
     public class AsyncSample
     {
         public static void Run()
@@ -37,4 +38,5 @@ namespace EventAggregatorNet.SampleUsage.Samples
             });
         }
     }
+#endif
 }

@@ -9,9 +9,9 @@ namespace EventAggregatorNet.SampleUsage
         {
 
             BasicSample.Run();
-
+#if ASYNC
             AsyncSample.Run();
-
+#endif
 
 
             Console.WriteLine("");
