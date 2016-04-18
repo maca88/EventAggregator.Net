@@ -202,12 +202,12 @@ namespace EventAggregatorNet
         /// <param name="message">The message instance</param>
         /// <param name="marshal">You can optionally override how the message publication action is marshalled</param>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1026:DefaultParametersShouldNotBeUsed")]
-        public async Task SendMessageAsync<TMessage>(TMessage message, Func<Func<Task>, Task> marshal = null)
+        public Task SendMessageAsync<TMessage>(TMessage message, Func<Func<Task>, Task> marshal = null)
         {
             if (marshal == null)
                 marshal = _config.DefaultThreadAsyncMarshaler;
 
-            await CallAsync<IListenerAsync<TMessage>>(message, marshal);
+            return CallAsync<IListenerAsync<TMessage>>(message, marshal);
         }
 
         /// <summary>
@@ -218,9 +218,9 @@ namespace EventAggregatorNet
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1026:DefaultParametersShouldNotBeUsed"),
          System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design",
              "CA1004:GenericMethodsShouldProvideTypeParameter")]
-        public async Task SendMessageAsync<TMessage>(Func<Func<Task>, Task> marshal = null) where TMessage : new()
+        public Task SendMessageAsync<TMessage>(Func<Func<Task>, Task> marshal = null) where TMessage : new()
         {
-            await SendMessageAsync(new TMessage(), marshal);
+            return SendMessageAsync(new TMessage(), marshal);
         }
 #endif
         private void Call<TListener>(object message, Action<Action> marshaller)
@@ -254,11 +254,11 @@ namespace EventAggregatorNet
             {
                 foreach (ListenerWrapper o in _listeners.Where(o => o.Handles<TListener>() || o.HandlesMessage(message)))
                 {
-                    bool wasThisOneCalled = await o.TryHandleAsync<TListener>(message);
+                    bool wasThisOneCalled = await o.TryHandleAsync<TListener>(message).ConfigureAwait(false);
                     if (wasThisOneCalled)
                         listenerCalledCount++;
                 }
-            });
+            }).ConfigureAwait(false);
 
             var wasAnyListenerCalled = listenerCalledCount > 0;
 
@@ -492,7 +492,7 @@ namespace EventAggregatorNet
 
                 foreach (var handler in _handlers)
                 {
-                    wasHandled |= await handler.TryHandleAsync<TListener>(target, message);
+                    wasHandled |= await handler.TryHandleAsync<TListener>(target, message).ConfigureAwait(false);
                 }
                 return wasHandled;
             }
@@ -558,7 +558,7 @@ namespace EventAggregatorNet
 #elif ASYNC && !UNWRAP_EX
                 if (TypeHelper.IsAssignableToGenericType(target.GetType(), typeof(IListenerAsync<>)))
                 {
-                    ((dynamic) _handlerMethod.Invoke(target, new[] {message})).Wait();
+                    ((Task)_handlerMethod.Invoke(target, new[] {message})).ConfigureAwait(false).GetAwaiter().GetResult();
                 }
                 else
                 {
@@ -567,18 +567,7 @@ namespace EventAggregatorNet
 #elif ASYNC
                 if (TypeHelper.IsAssignableToGenericType(target.GetType(), typeof(IListenerAsync<>)))
                 {
-                    try
-                    {
-                        ((dynamic) _handlerMethod.Invoke(target, new[] {message})).Wait();
-                    }
-                    catch (AggregateException ex)
-                    {
-#if NETFX_CORE || WINDOWS_PHONE || NET_CLIENT
-                        throw ex.InnerException;
-#else
-                        ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
-#endif
-                    }
+                    ((Task)_handlerMethod.Invoke(target, new[] { message })).ConfigureAwait(false).GetAwaiter().GetResult();
                 }
                 else
                 {
@@ -588,6 +577,9 @@ namespace EventAggregatorNet
                     }
                     catch (TargetInvocationException ex)
                     {
+#if NET_CLIENT
+                        PreserveStackTrace(ex.InnerException ?? ex);
+#endif
 #if NETFX_CORE || WINDOWS_PHONE || NET_CLIENT
                         throw ex.InnerException ?? ex;
 #else
@@ -602,6 +594,9 @@ namespace EventAggregatorNet
                 }
                 catch (TargetInvocationException ex)
                 {
+#if NET_CLIENT
+                    PreserveStackTrace(ex.InnerException ?? ex);
+#endif
 #if NETFX_CORE || WINDOWS_PHONE || NET_CLIENT
                     throw ex.InnerException ?? ex;
 #else
@@ -611,7 +606,7 @@ namespace EventAggregatorNet
 #endif
                 return true;
             }
-                
+
 #if ASYNC
             public async Task<bool> TryHandleAsync<TListener>(object target, object message)
                 where TListener : class
@@ -623,7 +618,7 @@ namespace EventAggregatorNet
                 if (!Handles<TListener>() && !HandlesMessage(message)) return false;
                 if (TypeHelper.IsAssignableToGenericType(target.GetType(), typeof (IListenerAsync<>)))
                 {
-                    await (dynamic) _handlerMethod.Invoke(target, new[] {message});
+                    await ((Task) _handlerMethod.Invoke(target, new[] {message})).ConfigureAwait(false);
                 }
                 else
                 {
@@ -636,6 +631,9 @@ namespace EventAggregatorNet
                     }
                     catch (TargetInvocationException ex)
                     {
+#if NET_CLIENT
+                        PreserveStackTrace(ex.InnerException ?? ex);
+#endif
 #if NETFX_CORE || WINDOWS_PHONE || NET_CLIENT
                         throw ex.InnerException ?? ex;
 #else
@@ -645,6 +643,15 @@ namespace EventAggregatorNet
 #endif
                 }
                 return true;
+            }
+#endif
+
+#if NET_CLIENT
+            private static void PreserveStackTrace(Exception exception)
+            {
+                var preserveStackTrace = typeof(Exception).GetMethod("InternalPreserveStackTrace",
+                  BindingFlags.Instance | BindingFlags.NonPublic);
+                preserveStackTrace.Invoke(exception, null);
             }
 #endif
         }
@@ -785,7 +792,7 @@ namespace EventAggregatorNet
                 set { _defaultThreadMarshaler = value; }
             }
 #if ASYNC
-            private Func<Func<Task>, Task> _defaultThreadAsyncMarshaler = async action => await action();
+            private Func<Func<Task>, Task> _defaultThreadAsyncMarshaler = action => action();
 
             public Func<Func<Task>, Task> DefaultThreadAsyncMarshaler
             {

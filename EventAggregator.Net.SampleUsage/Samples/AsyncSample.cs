@@ -12,7 +12,7 @@ namespace EventAggregatorNet.SampleUsage.Samples
             var config = new EventAggregator.Config
             {
                 // Make the marshaler run in the background thread
-                DefaultThreadAsyncMarshaler = async action => await Task.Factory.StartNew(action),
+                DefaultThreadAsyncMarshaler = action => Task.Factory.StartNew(action)
             };
 
             var eventAggregationManager = new EventAggregator(config);
@@ -29,13 +29,9 @@ namespace EventAggregatorNet.SampleUsage.Samples
     {
         public async Task Handle(SampleEventMessage message)
         {
-            await Task.Factory.StartNew(() =>
-            {
-                "LongRunningHandler - Received event".Log();
-                Thread.Sleep(1000);
-
-                "LongRunningHandler - Done with work".Log();
-            });
+            "LongRunningHandler - Received event".Log();
+            await TaskEx.Delay(1000);
+            "LongRunningHandler - Done with work".Log();
         }
     }
 #endif

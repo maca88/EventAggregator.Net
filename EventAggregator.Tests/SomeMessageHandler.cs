@@ -66,21 +66,21 @@ namespace EventAggregatorNet.Tests
         }
     }
 
-    public class FakeException : Exception { }
+    public class RealException : Exception { }
 
     public class SomeMessageHandler5 : IListener<SomeMessage>
     {
         public void Handle(SomeMessage message)
         {
-            throw new TargetInvocationException(new FakeException());
+            throw new RealException();
         }
     }
 
-    public class SomeMessageHandler6 : IListener<SomeMessage>
+    public class SomeMessageHandler6 : IListener<SomeMessage3>
     {
-        public void Handle(SomeMessage message)
+        public void Handle(SomeMessage3 message)
         {
-            throw new AggregateException(new FakeException());
+            message.EventAggregator.SendMessage<SomeMessage2>();
         }
     }
 
@@ -156,16 +156,16 @@ namespace EventAggregatorNet.Tests
         public async Task Handle(SomeMessage message)
         {
             await Task.Delay(500);
-            throw new TargetInvocationException(new FakeException());
+            throw new RealException();
         }
     }
 
-    public class SomeMessageHandler6Async : IListenerAsync<SomeMessage>
+    public class SomeMessageHandler6Async : IListenerAsync<SomeMessage3>
     {
-        public async Task Handle(SomeMessage message)
+        public async Task Handle(SomeMessage3 message)
         {
             await Task.Delay(500);
-            throw new AggregateException(new FakeException());
+            await message.EventAggregator.SendMessageAsync<SomeMessage2>();
         }
     }
 #endif
